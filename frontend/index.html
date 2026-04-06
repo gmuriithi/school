@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>After School Lessons</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://unpkg.com/vue@3.3.4/dist/vue.global.js"></script>
+  <script src="https://kit.fontawesome.com/a2a17a21d7.js" crossorigin="anonymous"></script>
+  <style>
+    body { background-color: #fdf2f2; }
+    .card img { height: 180px; object-fit: cover; }
+    .disabled-btn { opacity: 0.6; cursor: not-allowed; }
+    .cart-badge { font-size: 0.8rem; }
+    .alert-custom { background-color: #fff3cd; color: #856404; }
+    .btn-space { margin-top: auto; }
+    .lesson-subject { font-size: 0.9rem; font-weight: 600; color: #555; }
+    .lesson-desc { font-size: 0.85rem; color: #666; max-height: 60px; overflow: hidden; }
+  </style>
+</head>
+<body>
+<div id="app" class="container py-4">
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="text-primary">After School Lessons</h2>
+    <button class="btn btn-primary position-relative" @click="toggleCart">
+      <i class="fas fa-shopping-cart"></i> Cart
+      <span v-if="cartTotalItems > 0" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger cart-badge">
+        {{ cartTotalItems }}
+      </span>
+    </button>
+  </div>
+
+  <!-- Lessons Page -->
+  <div v-if="!showCart">
+
+    <!-- Search -->
+    <div class="mb-3">
+      <input type="text" class="form-control" placeholder="Search lessons..." v-model="searchQuery" @input="fetchLessons">
+    </div>
+
+    <!-- Sort -->
+    <div class="d-flex mb-3">
+      <select class="form-select me-2" v-model="sortBy" @change="sortLessons">
+        <option value="topic">Topic</option>
+        <option value="subject">Subject</option>
+        <option value="location">Location</option>
+        <option value="price">Price</option>
+        <option value="spaces">Availability</option>
+      </select>
+      <select class="form-select" v-model="sortOrder" @change="sortLessons">
+        <option value="asc">Ascending</option>
+        <option value="desc">Descending</option>
+      </select>
+    </div>
+
+    <!-- Lessons List -->
+    <div class="row">
+      <div class="col-md-4 mb-3" v-for="lesson in lessons" :key="lesson._id">
+        <div class="card h-100 shadow-sm d-flex flex-column">
+          <img :src="lesson.image || 'https://via.placeholder.com/300x180?text=No+Image'"
+               class="card-img-top" alt="Lesson Image">
+          <div class="card-body d-flex flex-column">
+            <div class="lesson-subject"><h5>{{ lesson.subject || 'No Subject' }}</h5></div>
+            
+            <p class="card-text mb-2">
+              <strong>Location:</strong> {{ lesson.location || 'N/A' }}<br>
+              <strong>Price:</strong> ${{ lesson.price ?? '0' }}<br>
+              <strong>Available:</strong> {{ lesson.spaces ?? 0 }}
+            </p>
+            <button class="btn btn-success btn-space w-100"
+                    :disabled="lesson.spaces === 0"
+                    :class="{ 'disabled-btn': lesson.spaces === 0 }"
+                    @click="addToCart(lesson)">
+              <i class="fas fa-cart-plus"></i> Add to Cart
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shopping Cart Page -->
+  <div v-if="showCart">
+    <h3 class="text-primary mb-3">Shopping Cart</h3>
+
+    <table class="table table-hover">
+      <thead>
+        <tr>
+          <th>Lesson</th>
+          <th>Price</th>
+          <th>Quantity</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="item in cart" :key="item._id">
+          <td>{{ item.topic }}</td>
+          <td>${{ item.price }}</td>
+          <td>{{ item.quantity }}</td>
+          <td>
+            <button class="btn btn-danger btn-sm" @click="removeFromCart(item)">
+              <i class="fas fa-trash"></i> Remove
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Validation Messages -->
+    <div v-if="showValidation" class="alert alert-custom">
+      <ul class="mb-0">
+        <li v-if="!nameValid">Name must contain letters only.</li>
+        <li v-if="!phoneValid">Phone must contain numbers only.</li>
+      </ul>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Name</label>
+      <input type="text" class="form-control" v-model="customerName" placeholder="Letters only">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Phone</label>
+      <input type="text" class="form-control" v-model="customerPhone" placeholder="Numbers only">
+    </div>
+
+    <button class="btn btn-primary me-2" @click="checkout">Checkout</button>
+    <button class="btn btn-secondary" @click="toggleCart">Back to Lessons</button>
+  </div>
+
+</div>
+
+<script>
+const app = Vue.createApp({
+  data() {
+    return {
+      lessons: [],
+      cart: [],
+      showCart: false,
+      customerName: '',
+      customerPhone: '',
+      sortBy: 'topic',
+      sortOrder: 'asc',
+      searchQuery: '',
+      showValidation: false
+    }
+  },
+  computed: {
+    cartTotalItems() {
+      return this.cart.reduce((sum, item) => sum + item.quantity, 0);
+    },
+    nameValid() {
+      return /^[a-zA-Z\s]+$/.test(this.customerName);
+    },
+    phoneValid() {
+      return /^[0-9]+$/.test(this.customerPhone);
+    }
+  },
+  methods: {
+    async fetchLessons() {
+      try {
+        const url = this.searchQuery
+          ? `https://school-dkny.onrender.com/search?q=${this.searchQuery}`
+          : 'https://school-dkny.onrender.com/lessons';
+        const res = await fetch(url);
+        const data = await res.json();
+        this.lessons = data.map(l => ({ ...l, quantity: 1 }));
+        this.sortLessons();
+      } catch (err) {
+        console.error('Fetch error:', err);
+      }
+    },
+    sortLessons() {
+      this.lessons.sort((a, b) => {
+        let valA = a[this.sortBy];
+        let valB = b[this.sortBy];
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+        if (this.sortOrder === 'asc') return valA > valB ? 1 : -1;
+        return valA < valB ? 1 : -1;
+      });
+    },
+    addToCart(lesson) {
+      if (lesson.spaces === 0) return;
+      const found = this.cart.find(item => item._id === lesson._id);
+      if (found) found.quantity++;
+      else this.cart.push({ ...lesson, quantity: 1 });
+      lesson.spaces--;
+    },
+    removeFromCart(item) {
+      const lesson = this.lessons.find(l => l._id === item._id);
+      if (lesson) lesson.spaces += item.quantity;
+      this.cart = this.cart.filter(c => c._id !== item._id);
+    },
+    toggleCart() {
+      this.showCart = !this.showCart;
+      this.showValidation = false;
+    },
+    async checkout() {
+      if (!this.nameValid || !this.phoneValid) {
+        this.showValidation = true;
+        return;
+      }
+      this.showValidation = false;
+
+      try {
+        const lessonIDs = this.cart.map(c => c._id);
+        const spacesOrdered = this.cart.map(c => c.quantity);
+
+        await fetch('https://school-dkny.onrender.com/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: this.customerName,
+            phone: this.customerPhone,
+            lessonIDs,
+            spaces: spacesOrdered
+          })
+        });
+
+        for (let i = 0; i < lessonIDs.length; i++) {
+          const lesson = this.lessons.find(l => l._id === lessonIDs[i]);
+          await fetch(`https://school-dkny.onrender.com/lessons/${lesson._id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ spaces: lesson.spaces })
+          });
+        }
+
+        alert('✅ Order submitted successfully!');
+        this.cart = [];
+        this.customerName = '';
+        this.customerPhone = '';
+        this.fetchLessons();
+        this.showCart = false;
+      } catch (err) {
+        console.error(err);
+        alert('❌ Error submitting order');
+      }
+    }
+  },
+  mounted() {
+    this.fetchLessons();
+  }
+});
+
+app.mount('#app');
+</script>
+</body>
+</html>
